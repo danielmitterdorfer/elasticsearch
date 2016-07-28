@@ -800,7 +800,7 @@ public abstract class TcpTransport<Channel> extends AbstractLifecycleComponent i
         try {
             latch.await(30, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            Thread.interrupted();
+            Thread.currentThread().interrupt();
             // ignore
         }
     }

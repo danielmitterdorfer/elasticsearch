@@ -491,7 +491,7 @@ public abstract class AbstractSimpleTransportTestCase extends ESTestCase {
 
     @TestLogging("transport:DEBUG,transport.tracer:TRACE")
     // boaz is on this
-    @AwaitsFix(bugUrl = "https://elasticsearch-ci.elastic.co/job/elastic+elasticsearch+master+multijob-os-compatibility/os=oraclelinux/835")
+    //@AwaitsFix(bugUrl = "https://elasticsearch-ci.elastic.co/job/elastic+elasticsearch+master+multijob-os-compatibility/os=oraclelinux/835")
     public void testConcurrentSendRespondAndDisconnect() throws BrokenBarrierException, InterruptedException {
         Set<Exception> sendingErrors = ConcurrentCollections.newConcurrentSet();
         Set<Exception> responseErrors = ConcurrentCollections.newConcurrentSet();

@@ -122,7 +122,7 @@ public class MockTcpTransport extends TcpTransport<MockTcpTransport.MockChannel>
         try {
             started.await();
         } catch (InterruptedException e) {
-            Thread.interrupted();
+            Thread.currentThread().interrupt();
         }
         return serverMockChannel;
     }
@@ -243,7 +243,16 @@ public class MockTcpTransport extends TcpTransport<MockTcpTransport.MockChannel>
 
     @Override
     protected void closeChannels(List<MockChannel> channel) throws IOException {
-        IOUtils.close(channel);
+        for (MockChannel mockChannel : channel) {
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            IOUtils.close(mockChannel);
+        }
+        //IOUtils.close(channel);
     }
 
     @Override
@@ -271,8 +280,17 @@ public class MockTcpTransport extends TcpTransport<MockTcpTransport.MockChannel>
         public void accept(Executor executor) throws IOException {
             while (isOpen.get()) {
                 Socket accept = serverSocket.accept();
+                logger.debug("socket accepted");
                 configureSocket(accept);
-                MockChannel mockChannel = new MockChannel(accept, localAddress, profile, workerChannels::remove);
+                logger.debug("Creating mock channel");
+                MockChannel mockChannel = new MockChannel(accept, localAddress, profile, (e) -> {
+                    final Boolean removed = workerChannels.remove(e);
+                    if (removed == null) {
+                        logger.warn("***** Channel not found on remove ****");
+                    } else {
+                        logger.info("Channel found");
+                    }
+                });
                 workerChannels.put(mockChannel, Boolean.TRUE);
                 mockChannel.loopRead(executor);
             }
@@ -312,6 +330,7 @@ public class MockTcpTransport extends TcpTransport<MockTcpTransport.MockChannel>
         @Override
         public void close() throws IOException {
             if (isOpen.compareAndSet(true, false)) {
+                logger.debug("Closing mock channel");
                 IOUtils.close( () -> cancellableThreads.cancel("channel closed"), serverSocket, activeChannel,
                     () -> IOUtils.close(workerChannels.keySet()), onClose);
             }
