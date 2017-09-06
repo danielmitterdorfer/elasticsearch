@@ -16,6 +16,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -53,7 +54,10 @@ public class InternalEngineBenchmark {
     @Setup
     public void setUp() throws Exception {
         dir = FSDirectory.open(INDEX_PATH);
-        writer = new IndexWriter(dir, new IndexWriterConfig().setOpenMode(OpenMode.CREATE));
+        writer = new IndexWriter(dir, new IndexWriterConfig()
+            // indexing buffer size = 50%, 8 shards -> 1/16th of heap size. Note that we'll likely bound by perThreadHardLimitMB anyway...
+            .setRAMBufferSizeMB(JvmInfo.jvmInfo().getConfiguredMaxHeapSize() / 16)
+            .setOpenMode(OpenMode.CREATE));
     }
 
     @TearDown
