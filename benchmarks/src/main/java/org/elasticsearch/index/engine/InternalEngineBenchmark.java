@@ -19,6 +19,7 @@ import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Group;
 import org.openjdk.jmh.annotations.GroupThreads;
@@ -45,31 +46,35 @@ import java.util.concurrent.TimeUnit;
 @State(Scope.Benchmark)
 @SuppressWarnings("unused") //invoked by benchmarking framework
 public class InternalEngineBenchmark {
+    private static final Path INDEX_PATH = Paths.get(System.getProperty("data.dir", "/tmp/lucene-7-bench-index"));
 
-    private static final Path INDEX_PATH = Paths.get("/tmp/lucene-7-bench-index");
-
-    Directory dir;
-    IndexWriter writer;
+    public Directory dir;
+    public IndexWriter writer;
 
     @Setup
     public void setUp() throws Exception {
+        // indexing buffer size = 50%, 8 shards -> 1/16th of heap size. Note that we'll likely bound by perThreadHardLimitMB anyway...
+        double indexingBuffer = Double.valueOf(
+            System.getProperty("buffer", String.valueOf(JvmInfo.jvmInfo().getConfiguredMaxHeapSize() / 16)));
+
         dir = FSDirectory.open(INDEX_PATH);
         writer = new IndexWriter(dir, new IndexWriterConfig()
-            // indexing buffer size = 50%, 8 shards -> 1/16th of heap size. Note that we'll likely bound by perThreadHardLimitMB anyway...
-            .setRAMBufferSizeMB(JvmInfo.jvmInfo().getConfiguredMaxHeapSize() / 16)
+            .setRAMBufferSizeMB(indexingBuffer)
             .setOpenMode(OpenMode.CREATE));
     }
 
     @TearDown
-    public void teadDown() throws IOException {
+    public void tearDown() throws IOException {
         IOUtils.close(writer, dir);
+        if (System.getProperty("data.dir.cleanup") != null) {
+            IOUtils.deleteFilesIgnoringExceptions(INDEX_PATH);
+        }
         writer = null;
         dir = null;
     }
 
-    // You can use this idiom to store thread local data. JMH will create one instance per thread and inject it to your benchmark method.
     @State(Scope.Thread)
-    public static class Ids {
+    public static class DocumentTemplate {
         private final String prefix = UUID.randomUUID().toString();
 
         private int counter;
@@ -112,32 +117,33 @@ public class InternalEngineBenchmark {
         }
     }
 
-    public Object indexDoc(Ids ids) throws Exception {
+    @CompilerControl(CompilerControl.Mode.INLINE)
+    public Document indexDoc(DocumentTemplate template) throws Exception {
         Document doc = new Document();
 
         // simulate the _id field
-        doc.add(new StringField("_id", ids.nextId(), Store.NO));
+        doc.add(new StringField("_id", template.nextId(), Store.NO));
 
         // simulate the seq no
-        doc.add(new NumericDocValuesField("_seq_no", ids.seqNo()));
+        doc.add(new NumericDocValuesField("_seq_no", template.seqNo()));
 
         // total_amount: scaled_float with scaling factor of 100
-        addLongValue(doc, "total_amount", ids.totalAmount());
+        addLongValue(doc, "total_amount", template.totalAmount());
 
         // improvement_surcharge: scaled_float with scaling factor of 100
-        addLongValue(doc, "improvement_surcharge", ids.improvementSurcharge());
+        addLongValue(doc, "improvement_surcharge", template.improvementSurcharge());
 
         // pickup_location: geopoint
-        addGeoPointValue(doc, "pickup_location", ids.latitude(), ids.longitude());
+        addGeoPointValue(doc, "pickup_location", template.latitude(), template.longitude());
 
         // pickup_datetime: date
-        addLongValue(doc, "pickup_datetime", ids.date());
+        addLongValue(doc, "pickup_datetime", template.date());
 
         // trip_type: keyword
         addKeywordValue(doc, "trip_type", "1");
 
         // dropoff_datetime: date
-        addLongValue(doc, "dropoff_datetime", ids.date());
+        addLongValue(doc, "dropoff_datetime", template.date());
 
         // trip_type: keyword
         addKeywordValue(doc, "rate_code_id", "1");
@@ -146,19 +152,19 @@ public class InternalEngineBenchmark {
         addLongValue(doc, "tolls_amount", 0);
 
         // dropoff_location: geopoint
-        addGeoPointValue(doc, "dropoff_location", ids.latitude(), ids.longitude());
+        addGeoPointValue(doc, "dropoff_location", template.latitude(), template.longitude());
 
         // passenger_count: long
         addLongValue(doc, "passenger_count", 1);
 
         // fare_amount: scaled_float with scaling factor of 100
-        addLongValue(doc, "fare_amount", ids.fareAmount());
+        addLongValue(doc, "fare_amount", template.fareAmount());
 
         // extra: scaled_float with scaling factor of 100
-        addLongValue(doc, "extra", ids.fareAmount());
+        addLongValue(doc, "extra", template.fareAmount());
 
         // trip_distance: scaled_float with scaling factor of 100
-        addLongValue(doc, "trip_distance", ids.tripDistance());
+        addLongValue(doc, "trip_distance", template.tripDistance());
 
         // tip_amount: scaled_float with scaling factor of 100
         addLongValue(doc, "tip_amount", 0);
@@ -221,26 +227,46 @@ public class InternalEngineBenchmark {
         doc.add(new LatLonDocValuesField(field, lat, lon));
     }
 
-    // These are three example benchmark methods. They will index documents with 1, 2 and 4 threads
 
     @Benchmark
     @Group("index_1")
     @GroupThreads()
-    public Object indexDoc_1(Ids ids) throws Exception {
-        return indexDoc(ids);
+    public Document indexDoc_1(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_2")
     @GroupThreads(2)
-    public Object indexDoc_2(Ids ids) throws Exception {
-        return indexDoc(ids);
+    public Document indexDoc_2(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_4")
     @GroupThreads(4)
-    public Object indexDoc_4(Ids ids) throws Exception {
-        return indexDoc(ids);
+    public Document indexDoc_4(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
+    }
+
+    @Benchmark
+    @Group("index_8")
+    @GroupThreads(8)
+    public Document indexDoc_8(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
+    }
+
+    @Benchmark
+    @Group("index_16")
+    @GroupThreads(16)
+    public Document indexDoc_16(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
+    }
+
+    @Benchmark
+    @Group("index_32")
+    @GroupThreads(32)
+    public Document indexDoc_32(DocumentTemplate template) throws Exception {
+        return indexDoc(template);
     }
 }
