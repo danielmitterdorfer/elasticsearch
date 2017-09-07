@@ -53,6 +53,10 @@ public class InternalEngineBenchmark {
 
     @Setup
     public void setUp() throws Exception {
+        // always ensure we start with an empty index directory
+        if (System.getProperty("data.dir.cleanup") != null) {
+            IOUtils.rm(INDEX_PATH);
+        }
         // indexing buffer size = 50%, 8 shards -> 1/16th of heap size. Note that we'll likely bound by perThreadHardLimitMB anyway...
         double indexingBuffer = Double.valueOf(
             System.getProperty("buffer", String.valueOf(JvmInfo.jvmInfo().getConfiguredMaxHeapSize() / 16)));
@@ -66,9 +70,6 @@ public class InternalEngineBenchmark {
     @TearDown
     public void tearDown() throws IOException {
         IOUtils.close(writer, dir);
-        if (System.getProperty("data.dir.cleanup") != null) {
-            IOUtils.deleteFilesIgnoringExceptions(INDEX_PATH);
-        }
         writer = null;
         dir = null;
     }
