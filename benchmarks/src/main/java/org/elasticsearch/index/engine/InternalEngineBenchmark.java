@@ -17,6 +17,7 @@ import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.monitor.jvm.JvmInfo;
+import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.CompilerControl;
@@ -122,6 +123,15 @@ public class InternalEngineBenchmark {
             return (counter * 31) % 837;
         }
     }
+
+
+    @State(Scope.Thread)
+    @AuxCounters(AuxCounters.Type.EVENTS)
+    public static class EventCounters {
+        public int docs;
+    }
+
+
 
     @CompilerControl(CompilerControl.Mode.INLINE)
     public Document indexDoc(DocumentTemplate template) throws Exception {
@@ -237,48 +247,54 @@ public class InternalEngineBenchmark {
     @Benchmark
     @Group("index_1")
     @GroupThreads()
-    public Document indexDoc_1(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_1(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_2")
     @GroupThreads(2)
-    public Document indexDoc_2(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_2(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_4")
     @GroupThreads(4)
-    public Document indexDoc_4(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_4(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_8")
     @GroupThreads(8)
-    public Document indexDoc_8(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_8(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_16")
     @GroupThreads(16)
-    public Document indexDoc_16(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_16(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_32")
     @GroupThreads(32)
-    public Document indexDoc_32(DocumentTemplate template, Blackhole bh) throws Exception {
+    public Document indexDoc_32(DocumentTemplate template, Blackhole bh, EventCounters events) throws Exception {
         bh.consume(tokens);
+        events.docs++;
         return indexDoc(template);
     }
 }
