@@ -26,11 +26,13 @@ import org.openjdk.jmh.annotations.GroupThreads;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.TearDown;
 import org.openjdk.jmh.annotations.Warmup;
+import org.openjdk.jmh.infra.Blackhole;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -50,6 +52,9 @@ public class InternalEngineBenchmark {
 
     public Directory dir;
     public IndexWriter writer;
+
+    @Param({"100"})
+    public int tokens;
 
     @Setup
     public void setUp() throws Exception {
@@ -232,42 +237,48 @@ public class InternalEngineBenchmark {
     @Benchmark
     @Group("index_1")
     @GroupThreads()
-    public Document indexDoc_1(DocumentTemplate template) throws Exception {
+    public Document indexDoc_1(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_2")
     @GroupThreads(2)
-    public Document indexDoc_2(DocumentTemplate template) throws Exception {
+    public Document indexDoc_2(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_4")
     @GroupThreads(4)
-    public Document indexDoc_4(DocumentTemplate template) throws Exception {
+    public Document indexDoc_4(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_8")
     @GroupThreads(8)
-    public Document indexDoc_8(DocumentTemplate template) throws Exception {
+    public Document indexDoc_8(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_16")
     @GroupThreads(16)
-    public Document indexDoc_16(DocumentTemplate template) throws Exception {
+    public Document indexDoc_16(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 
     @Benchmark
     @Group("index_32")
     @GroupThreads(32)
-    public Document indexDoc_32(DocumentTemplate template) throws Exception {
+    public Document indexDoc_32(DocumentTemplate template, Blackhole bh) throws Exception {
+        bh.consume(tokens);
         return indexDoc(template);
     }
 }
