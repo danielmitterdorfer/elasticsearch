@@ -24,6 +24,7 @@ import org.openjdk.jmh.annotations.CompilerControl;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Group;
 import org.openjdk.jmh.annotations.GroupThreads;
+import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
@@ -42,8 +43,8 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Fork(1)
-@Warmup(iterations = 10)
-@Measurement(iterations = 10)
+@Warmup(iterations = 2, time = 30, timeUnit = TimeUnit.SECONDS)
+@Measurement(iterations = 2, time = 30, timeUnit = TimeUnit.SECONDS)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @State(Scope.Benchmark)
@@ -57,7 +58,8 @@ public class InternalEngineBenchmark {
     @Param({"100"})
     public int tokens;
 
-    @Setup
+    // as we write to the file system (and each iteration takes a longer time than usual) we want to reset the state per iteration.
+    @Setup(Level.Iteration)
     public void setUp() throws Exception {
         // always ensure we start with an empty index directory
         if (System.getProperty("data.dir.cleanup") != null) {
@@ -73,7 +75,7 @@ public class InternalEngineBenchmark {
             .setOpenMode(OpenMode.CREATE));
     }
 
-    @TearDown
+    @TearDown(Level.Iteration)
     public void tearDown() throws IOException {
         IOUtils.close(writer, dir);
         writer = null;
