@@ -133,94 +133,22 @@ class LiveVersionMap implements ReferenceManager.RefreshListener, Accountable {
 
     /** Returns the live version (add or delete) for this uid. */
     VersionValue getUnderLock(final BytesRef uid) {
-        Maps currentMaps = maps;
-
-        // First try to get the "live" value:
-        VersionValue value = currentMaps.current.get(uid);
-        if (value != null) {
-            return value;
-        }
-
-        value = currentMaps.old.get(uid);
-        if (value != null) {
-            return value;
-        }
-
-        return tombstones.get(uid);
+        return null;
     }
 
     /** Adds this uid/version to the pending adds map. */
     void putUnderLock(BytesRef uid, VersionValue version) {
-        assert uid.bytes.length == uid.length : "Oversized _uid! UID length: " + uid.length + ", bytes length: " + uid.bytes.length;
-        long uidRAMBytesUsed = BASE_BYTES_PER_BYTESREF + uid.bytes.length;
-
-        final VersionValue prev = maps.current.put(uid, version);
-        if (prev != null) {
-            // Deduct RAM for the version we just replaced:
-            long prevBytes = BASE_BYTES_PER_CHM_ENTRY;
-            if (prev.isDelete() == false) {
-                prevBytes += prev.ramBytesUsed() + uidRAMBytesUsed;
-            }
-            ramBytesUsedCurrent.addAndGet(-prevBytes);
-        }
-
-        // Add RAM for the new version:
-        long newBytes = BASE_BYTES_PER_CHM_ENTRY;
-        if (version.isDelete() == false) {
-            newBytes += version.ramBytesUsed() + uidRAMBytesUsed;
-        }
-        ramBytesUsedCurrent.addAndGet(newBytes);
-
-        final VersionValue prevTombstone;
-        if (version.isDelete()) {
-            // Also enroll the delete into tombstones, and account for its RAM too:
-            prevTombstone = tombstones.put(uid, (DeleteVersionValue)version);
-
-            // We initially account for BytesRef/VersionValue RAM for a delete against the tombstones, because this RAM will not be freed up
-            // on refresh. Later, in removeTombstoneUnderLock, if we clear the tombstone entry but the delete remains in current, we shift
-            // the accounting to current:
-            ramBytesUsedTombstones.addAndGet(BASE_BYTES_PER_CHM_ENTRY + version.ramBytesUsed() + uidRAMBytesUsed);
-
-            if (prevTombstone == null && prev != null && prev.isDelete()) {
-                // If prev was a delete that had already been removed from tombstones, then current was already accounting for the
-                // BytesRef/VersionValue RAM, so we now deduct that as well:
-                ramBytesUsedCurrent.addAndGet(-(prev.ramBytesUsed() + uidRAMBytesUsed));
-            }
-        } else {
-            // UID came back to life so we remove the tombstone:
-            prevTombstone = tombstones.remove(uid);
-        }
-
-        // Deduct tombstones bytes used for the version we just removed or replaced:
-        if (prevTombstone != null) {
-            long v = ramBytesUsedTombstones.addAndGet(-(BASE_BYTES_PER_CHM_ENTRY + prevTombstone.ramBytesUsed() + uidRAMBytesUsed));
-            assert v >= 0: "bytes=" + v;
-        }
+        // noop
     }
 
     /** Removes this uid from the pending deletes map. */
     void removeTombstoneUnderLock(BytesRef uid) {
-
-        long uidRAMBytesUsed = BASE_BYTES_PER_BYTESREF + uid.bytes.length;
-
-        final VersionValue prev = tombstones.remove(uid);
-        if (prev != null) {
-            assert prev.isDelete();
-            long v = ramBytesUsedTombstones.addAndGet(-(BASE_BYTES_PER_CHM_ENTRY + prev.ramBytesUsed() + uidRAMBytesUsed));
-            assert v >= 0: "bytes=" + v;
-        }
-        final VersionValue curVersion = maps.current.get(uid);
-        if (curVersion != null && curVersion.isDelete()) {
-            // We now shift accounting of the BytesRef from tombstones to current, because a refresh would clear this RAM.  This should be
-            // uncommon, because with the default refresh=1s and gc_deletes=60s, deletes should be cleared from current long before we drop
-            // them from tombstones:
-            ramBytesUsedCurrent.addAndGet(curVersion.ramBytesUsed() + uidRAMBytesUsed);
-        }
+        // no op
     }
 
     /** Caller has a lock, so that this uid will not be concurrently added/deleted by another thread. */
     DeleteVersionValue getTombstoneUnderLock(BytesRef uid) {
-        return tombstones.get(uid);
+        return null;
     }
 
     /** Iterates over all deleted versions, including new ones (not yet exposed via reader) and old ones (exposed via reader but not yet GC'd). */
