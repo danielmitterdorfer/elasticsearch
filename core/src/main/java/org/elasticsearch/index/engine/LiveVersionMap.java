@@ -113,7 +113,7 @@ class LiveVersionMap implements ReferenceManager.RefreshListener, Accountable {
         // map.  While reopen is running, any lookup will first
         // try this new map, then fallback to old, then to the
         // current searcher:
-        maps = new Maps(ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency(maps.current.size()), maps.current);
+        maps = new Maps(ConcurrentCollections.newConcurrentMapWithAggressiveConcurrency(2 * maps.current.size()), maps.current);
 
         // This is not 100% correct, since concurrent indexing ops can change these counters in between our execution of the previous
         // line and this one, but that should be minor, and the error won't accumulate over time:
