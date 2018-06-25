@@ -28,8 +28,11 @@ import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -44,10 +47,27 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
 
     private static final String CHILD_LOGGER_PREFIX = "org.elasticsearch.indices.breaker.";
 
+    private static final MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+
     private final ConcurrentMap<String, CircuitBreaker> breakers = new ConcurrentHashMap<>();
 
+    //TODO: Document me
+    public static final Setting<Boolean> USE_REAL_MEMORY_USAGE_SETTING =
+        Setting.boolSetting("indices.breaker.userealmemory", settings -> {
+            ByteSizeValue maxHeapSize = new ByteSizeValue(memoryMXBean.getHeapMemoryUsage().getMax());
+            return Boolean.toString(maxHeapSize.compareTo(new ByteSizeValue(1, ByteSizeUnit.GB)) < 0);
+        });
+
     public static final Setting<ByteSizeValue> TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING =
-        Setting.memorySizeSetting("indices.breaker.total.limit", "70%", Property.Dynamic, Property.NodeScope);
+        Setting.memorySizeSetting("indices.breaker.total.limit", settings -> {
+            if (USE_REAL_MEMORY_USAGE_SETTING.get(settings)) {
+                ByteSizeValue maxHeapSize = new ByteSizeValue(memoryMXBean.getHeapMemoryUsage().getMax());
+                ByteSizeValue safetyMargin = new ByteSizeValue(64, ByteSizeUnit.MB);
+                return new ByteSizeValue(Math.max(maxHeapSize.getBytes() - safetyMargin.getBytes(), 0)).toString();
+            } else {
+                return "70%";
+            }
+        }, Property.Dynamic, Property.NodeScope);
 
     public static final Setting<ByteSizeValue> FIELDDATA_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.fielddata.limit", "60%", Property.Dynamic, Property.NodeScope);
@@ -82,6 +102,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     private volatile BreakerSettings inFlightRequestsSettings;
     private volatile BreakerSettings requestSettings;
     private volatile BreakerSettings accountingSettings;
+    private final boolean trackRealMemoryUsage;
 
     // Tripped count for when redistribution was attempted but wasn't successful
     private final AtomicLong parentTripCount = new AtomicLong(0);
@@ -119,6 +140,8 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         if (logger.isTraceEnabled()) {
             logger.trace("parent circuit breaker with settings {}", this.parentSettings);
         }
+
+        this.trackRealMemoryUsage = USE_REAL_MEMORY_USAGE_SETTING.get(settings);
 
         registerBreaker(this.requestSettings);
         registerBreaker(this.fielddataSettings);
@@ -191,17 +214,15 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
 
     @Override
     public AllCircuitBreakerStats stats() {
-        long parentEstimated = 0;
         List<CircuitBreakerStats> allStats = new ArrayList<>(this.breakers.size());
         // Gather the "estimated" count for the parent breaker by adding the
         // estimations for each individual breaker
         for (CircuitBreaker breaker : this.breakers.values()) {
             allStats.add(stats(breaker.getName()));
-            parentEstimated += breaker.getUsed();
         }
         // Manually add the parent breaker settings since they aren't part of the breaker map
         allStats.add(new CircuitBreakerStats(CircuitBreaker.PARENT, parentSettings.getLimit(),
-                        parentEstimated, 1.0, parentTripCount.get()));
+                        parentUsed(), 1.0, parentTripCount.get()));
         return new AllCircuitBreakerStats(allStats.toArray(new CircuitBreakerStats[allStats.size()]));
     }
 
@@ -211,15 +232,23 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         return new CircuitBreakerStats(breaker.getName(), breaker.getLimit(), breaker.getUsed(), breaker.getOverhead(), breaker.getTrippedCount());
     }
 
+    private long parentUsed() {
+        if (this.trackRealMemoryUsage) {
+            return memoryMXBean.getHeapMemoryUsage().getUsed();
+        } else {
+            long parentEstimated = 0;
+            for (CircuitBreaker breaker : this.breakers.values()) {
+                parentEstimated += breaker.getUsed() * breaker.getOverhead();
+            }
+            return parentEstimated;
+        }
+    }
+
     /**
      * Checks whether the parent breaker has been tripped
      */
     public void checkParentLimit(String label) throws CircuitBreakingException {
-        long totalUsed = 0;
-        for (CircuitBreaker breaker : this.breakers.values()) {
-            totalUsed += (breaker.getUsed() * breaker.getOverhead());
-        }
-
+        long totalUsed = parentUsed();
         long parentLimit = this.parentSettings.getLimit();
         if (totalUsed > parentLimit) {
             this.parentTripCount.incrementAndGet();
