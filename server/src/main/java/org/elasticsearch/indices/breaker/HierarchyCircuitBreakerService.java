@@ -56,7 +56,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         Setting.boolSetting("indices.breaker.userealmemory", settings -> {
             ByteSizeValue maxHeapSize = new ByteSizeValue(memoryMXBean.getHeapMemoryUsage().getMax());
             return Boolean.toString(maxHeapSize.compareTo(new ByteSizeValue(1, ByteSizeUnit.GB)) < 0);
-        });
+        }, Property.NodeScope);
 
     public static final Setting<ByteSizeValue> TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.total.limit", settings -> {
