@@ -51,9 +51,8 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
 
     private final ConcurrentMap<String, CircuitBreaker> breakers = new ConcurrentHashMap<>();
 
-    //TODO: Document me
     public static final Setting<Boolean> USE_REAL_MEMORY_USAGE_SETTING =
-        Setting.boolSetting("indices.breaker.userealmemory", settings -> {
+        Setting.boolSetting("indices.breaker.total.userealmemory", settings -> {
             ByteSizeValue maxHeapSize = new ByteSizeValue(memoryMXBean.getHeapMemoryUsage().getMax());
             return Boolean.toString(maxHeapSize.compareTo(new ByteSizeValue(1, ByteSizeUnit.GB)) < 0);
         }, Property.NodeScope);
@@ -61,9 +60,13 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     public static final Setting<ByteSizeValue> TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.total.limit", settings -> {
             if (USE_REAL_MEMORY_USAGE_SETTING.get(settings)) {
-                ByteSizeValue maxHeapSize = new ByteSizeValue(memoryMXBean.getHeapMemoryUsage().getMax());
-                ByteSizeValue safetyMargin = new ByteSizeValue(64, ByteSizeUnit.MB);
-                return new ByteSizeValue(Math.max(maxHeapSize.getBytes() - safetyMargin.getBytes(), 0)).toString();
+                long maxHeapSizeBytes = memoryMXBean.getHeapMemoryUsage().getMax();
+//                long absoluteSafetyMargin = new ByteSizeValue(64, ByteSizeUnit.MB).getBytes();
+                long relativeSafetyMargin = (long) (0.05d * maxHeapSizeBytes);
+//                long safetyMarginBytes = Math.max(absoluteSafetyMargin, relativeSafetyMargin);
+                long safetyMarginBytes = relativeSafetyMargin;
+
+                return new ByteSizeValue(Math.max(maxHeapSizeBytes - safetyMarginBytes, 0)).toString();
             } else {
                 return "70%";
             }
@@ -222,7 +225,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         }
         // Manually add the parent breaker settings since they aren't part of the breaker map
         allStats.add(new CircuitBreakerStats(CircuitBreaker.PARENT, parentSettings.getLimit(),
-                        parentUsed(), 1.0, parentTripCount.get()));
+                        parentUsed(0L), 1.0, parentTripCount.get()));
         return new AllCircuitBreakerStats(allStats.toArray(new CircuitBreakerStats[allStats.size()]));
     }
 
@@ -232,9 +235,9 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
         return new CircuitBreakerStats(breaker.getName(), breaker.getLimit(), breaker.getUsed(), breaker.getOverhead(), breaker.getTrippedCount());
     }
 
-    private long parentUsed() {
+    private long parentUsed(long newBytesReserved) {
         if (this.trackRealMemoryUsage) {
-            return memoryMXBean.getHeapMemoryUsage().getUsed();
+            return memoryMXBean.getHeapMemoryUsage().getUsed() + newBytesReserved;
         } else {
             long parentEstimated = 0;
             for (CircuitBreaker breaker : this.breakers.values()) {
@@ -247,8 +250,8 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     /**
      * Checks whether the parent breaker has been tripped
      */
-    public void checkParentLimit(String label) throws CircuitBreakingException {
-        long totalUsed = parentUsed();
+    public void checkParentLimit(long newBytesReserved, String label) throws CircuitBreakingException {
+        long totalUsed = parentUsed(newBytesReserved);
         long parentLimit = this.parentSettings.getLimit();
         if (totalUsed > parentLimit) {
             this.parentTripCount.incrementAndGet();

@@ -97,7 +97,7 @@ public class MemoryCircuitBreakerTests extends ESTestCase {
             }
 
             @Override
-            public void checkParentLimit(String label) throws CircuitBreakingException {
+            public void checkParentLimit(long newBytesReserved, String label) throws CircuitBreakingException {
                 // never trip
             }
         };
@@ -157,7 +157,7 @@ public class MemoryCircuitBreakerTests extends ESTestCase {
             }
 
             @Override
-            public void checkParentLimit(String label) throws CircuitBreakingException {
+            public void checkParentLimit(long newBytesReserved, String label) throws CircuitBreakingException {
                 // Parent will trip right before regular breaker would trip
                 if (getBreaker(CircuitBreaker.REQUEST).getUsed() > parentLimit) {
                     parentTripped.incrementAndGet();
