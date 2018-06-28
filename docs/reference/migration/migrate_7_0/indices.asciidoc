@@ -71,11 +71,4 @@ The parent circuit breaker defines a new setting `indices.breaker.total.userealm
 `true` by default if the JVM heap size is smaller than 1GB. This means that the parent circuit
 breaker will trip based on currently used heap memory instead of only considering the reserved
 memory by child circuit breakers. When this setting is `true`, the default parent breaker limit
-also changes from 70% of the JVM heap size to the JVM heap size minus a safety margin of 64MB or
-5% of the heap size, whichever is larger. Consider two examples: a 512MB heap size and a 32GB heap
-size:
-
-* On a 512MB heap, the parent circuit breaker tripped at 358MB reserved heap memory (70% of 512MB).
-  Now, the parent circuit breaker trips at 448MB real memory usage (512MB - 64MB).
-* On a 32GB heap, the parent circuit breaker tripped at 22.4GB reserved heap memory (70% of 32GB).
-  Now, the parent circuit breaker trips at 30.4GB real memory usage (95% of 32GB).
+also changes from 70% to 95% of the JVM heap size.

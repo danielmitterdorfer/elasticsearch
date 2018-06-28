@@ -60,13 +60,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     public static final Setting<ByteSizeValue> TOTAL_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("indices.breaker.total.limit", settings -> {
             if (USE_REAL_MEMORY_USAGE_SETTING.get(settings)) {
-                long maxHeapSizeBytes = memoryMXBean.getHeapMemoryUsage().getMax();
-//                long absoluteSafetyMargin = new ByteSizeValue(64, ByteSizeUnit.MB).getBytes();
-                long relativeSafetyMargin = (long) (0.05d * maxHeapSizeBytes);
-//                long safetyMarginBytes = Math.max(absoluteSafetyMargin, relativeSafetyMargin);
-                long safetyMarginBytes = relativeSafetyMargin;
-
-                return new ByteSizeValue(Math.max(maxHeapSizeBytes - safetyMarginBytes, 0)).toString();
+                return "95%";
             } else {
                 return "70%";
             }
@@ -96,7 +90,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
     public static final Setting<ByteSizeValue> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_LIMIT_SETTING =
         Setting.memorySizeSetting("network.breaker.inflight_requests.limit", "100%", Property.Dynamic, Property.NodeScope);
     public static final Setting<Double> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_OVERHEAD_SETTING =
-        Setting.doubleSetting("network.breaker.inflight_requests.overhead", 1.0d, 0.0d, Property.Dynamic, Property.NodeScope);
+        Setting.doubleSetting("network.breaker.inflight_requests.overhead", 2.0d, 0.0d, Property.Dynamic, Property.NodeScope);
     public static final Setting<CircuitBreaker.Type> IN_FLIGHT_REQUESTS_CIRCUIT_BREAKER_TYPE_SETTING =
         new Setting<>("network.breaker.inflight_requests.type", "memory", CircuitBreaker.Type::parseValue, Property.NodeScope);
 
@@ -237,7 +231,7 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
 
     private long parentUsed(long newBytesReserved) {
         if (this.trackRealMemoryUsage) {
-            return memoryMXBean.getHeapMemoryUsage().getUsed() + newBytesReserved;
+            return currentMemoryUsage() + newBytesReserved;
         } else {
             long parentEstimated = 0;
             for (CircuitBreaker breaker : this.breakers.values()) {
@@ -245,6 +239,11 @@ public class HierarchyCircuitBreakerService extends CircuitBreakerService {
             }
             return parentEstimated;
         }
+    }
+
+    //package private to allow overriding it in tests
+    long currentMemoryUsage() {
+        return memoryMXBean.getHeapMemoryUsage().getUsed();
     }
 
     /**

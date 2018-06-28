@@ -25,8 +25,7 @@ The parent-level breaker can be configured with the following settings:
 
     Starting limit for overall parent breaker, defaults to 70% of JVM heap if
     `indices.breaker.total.userealmemory` is `false`. If `indices.breaker.total.userealmemory`
-    is `true`, defaults to the configured JVM heap size minus a safety margin of 64MB or 5% of
-    the heap size, whichever is larger.
+    is `true`, defaults to 95% of the JVM heap.
 
 [[fielddata-circuit-breaker]]
 [float]
