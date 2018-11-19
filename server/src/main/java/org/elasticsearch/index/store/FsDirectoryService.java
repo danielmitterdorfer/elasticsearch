@@ -28,9 +28,11 @@ import org.apache.lucene.store.NIOFSDirectory;
 import org.apache.lucene.store.NativeFSLockFactory;
 import org.apache.lucene.store.SimpleFSDirectory;
 import org.apache.lucene.store.SimpleFSLockFactory;
+import org.apache.lucene.util.Constants;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
 import org.elasticsearch.common.settings.Setting.Property;
+import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.index.IndexModule;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.shard.ShardPath;
@@ -38,6 +40,7 @@ import org.elasticsearch.index.shard.ShardPath;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -87,8 +90,31 @@ public class FsDirectoryService extends DirectoryService {
             return new NIOFSDirectory(location, lockFactory);
         } else if (IndexModule.Type.MMAPFS.match(storeType)) {
             return new MMapDirectory(location, lockFactory);
+        } else if (IndexModule.Type.DEFAULTFS.match(storeType)) {
+            final FSDirectory open = FSDirectory.open(location, lockFactory); // use lucene defaults
+            if (open instanceof MMapDirectory && Constants.WINDOWS == false) {
+                return newDefaultDir(location, (MMapDirectory) open, lockFactory);
+            }
+            return open;
         }
         throw new IllegalArgumentException("No directory found for type [" + storeType + "]");
+    }
+
+    /*
+     * We are mmapping norms, docvalues as well as term dictionaries, all other files are served through NIOFS
+     * this provides good random access performance while not creating unnecessary mmaps for files like stored
+     * fields etc.
+     */
+    private static final Set<String> PRIMARY_EXTENSIONS = Collections.unmodifiableSet(Sets.newHashSet("nvd", "dvd", "tim"));
+
+    private Directory newDefaultDir(Path location, final MMapDirectory mmapDir, LockFactory lockFactory) throws IOException {
+        return new FileSwitchDirectory(PRIMARY_EXTENSIONS, mmapDir, new NIOFSDirectory(location, lockFactory), true) {
+            @Override
+            public String[] listAll() throws IOException {
+                // Avoid doing listAll twice:
+                return mmapDir.listAll();
+            }
+        };
     }
 
     private static Directory setPreload(Directory directory, Path location, LockFactory lockFactory,

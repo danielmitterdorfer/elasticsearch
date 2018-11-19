@@ -296,6 +296,7 @@ public final class IndexModule {
         NIOFS,
         MMAPFS,
         SIMPLEFS,
+        DEFAULTFS,
         FS;
 
         public String getSettingsKey() {
